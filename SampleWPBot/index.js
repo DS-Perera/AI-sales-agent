@@ -39,6 +39,50 @@ app.get("/master-prompt", (req, res) => {
   res.json({ masterPrompt });
 });
 
+app.post("/send-bulk-message", async (req, res) => {
+  const { csvData } = req.body; // Assume `csvData` is an array of rows
+  console.log("Received CSV Data:", csvData);
+
+  if (!csvData || csvData.length === 0) {
+    return res.status(400).send("CSV data is empty or invalid.");
+  }
+
+  let index = 0;
+
+  // Function to process each row and move to the next row after 30 seconds
+  const processNextRow = async () => {
+    if (index < csvData.length) {
+      const row = csvData[index]; // Get the current row (e.g., [phoneNumber, message])
+      console.log(`Processing row ${index + 1}:`, row);
+
+      // Assuming each row is [phoneNumber, message]
+      const [phoneNumber, message] = row;
+      var t = phoneNumber + "@c.us"; // For testing purposes
+      try {
+        // Send the message to the specified number
+        await client.sendMessage(t, message);
+        console.log(`Message sent to ${t}: ${message}`);
+      } catch (error) {
+        console.error(`Error sending message to ${t}:`, error);
+      }
+
+      // Move to the next row after a delay
+      index++;
+      setTimeout(processNextRow, 3000); // Wait 30 seconds before processing the next row
+    } else {
+      console.log("All rows processed.");
+    }
+  };
+
+  // Start processing the first row
+  processNextRow();
+
+  // Immediately respond to the request while processing rows in the background
+  res
+    .status(200)
+    .send("Bulk message process started. Check the console for progress.");
+});
+
 // Endpoint to update the master prompt
 app.post("/master-prompt", (req, res) => {
   const { newPrompt } = req.body;

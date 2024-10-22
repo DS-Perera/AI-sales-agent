@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import config from "../config"; // Import config file
+import Papa from "papaparse"; // CSV parser
 
 const WhatsappBulkMessages = (prop) => {
   const [formData, setFormData] = useState({
@@ -12,11 +13,25 @@ const WhatsappBulkMessages = (prop) => {
   const [userData, setUserData] = useState(null);
   const storedUserName = localStorage.getItem("userName");
   const [loading1, setLoading1] = useState(false);
+  const [csvData, setCsvData] = useState([]);
+  const [csvUploaded, setCsvUploaded] = useState(false); // Track if a CSV is uploaded
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleCSVUpload = (e) => {
+    const file = e.target.files[0];
+    Papa.parse(file, {
+      complete: (result) => {
+        setCsvData(result.data); // Store CSV data as an array
+        setCsvUploaded(true); // Set CSV as uploaded
+      },
+      header: false,
+      skipEmptyLines: true,
     });
   };
 
@@ -51,6 +66,7 @@ const WhatsappBulkMessages = (prop) => {
 
     setLoading1(false);
   };
+
   useEffect(() => {
     fetchUserData();
   }, []); // Automatically fetch user data when component mounts
@@ -61,22 +77,63 @@ const WhatsappBulkMessages = (prop) => {
     setError("");
     setSuccessMessage("");
 
-    fetch(`${userData.wplink}/send-message`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(formData),
-    })
-      .then((response) => response.json())
-      .then((result) => {
-        setLoading(false);
-        setSuccessMessage("Message sent successfully!");
+    if (csvUploaded && csvData.length > 0) {
+      // Sending CSV data to the server
+      fetch(`${userData.wplink}/send-bulk-message`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ csvData }),
       })
-      .catch((error) => {
-        setLoading(false);
-        // setError("Failed to send the message. Please try again.");
-      });
+        .then((response) => response.json())
+        .then((result) => {
+          setLoading(false);
+          setSuccessMessage("Bulk messages sent successfully!");
+        })
+        .catch((error) => {
+          setLoading(false);
+          setError("Failed to send bulk messages. Please try again.");
+        });
+    } else {
+      // Sending a single message
+      fetch(`${userData.wplink}/send-message`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      })
+        .then((response) => response.json())
+        .then((result) => {
+          setLoading(false);
+          setSuccessMessage("Message sent successfully!");
+        })
+        .catch((error) => {
+          setLoading(false);
+          setError("Failed to send the message. Please try again.");
+        });
+    }
+  };
+
+  // Function to trigger the CSV file download
+  const downloadSampleCSV = () => {
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [
+        ["Phone Number", "Message"],
+        ["94771461925", "Hello, this is a test message."],
+        ["94771234567", "This is another test message."],
+      ]
+        .map((e) => e.join(","))
+        .join("\n");
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "sample.csv");
+    document.body.appendChild(link); // Required for Firefox
+    link.click(); // Trigger the download
   };
 
   return (
@@ -104,7 +161,8 @@ const WhatsappBulkMessages = (prop) => {
                     value={formData.to}
                     onChange={handleChange}
                     placeholder="Enter Recipient"
-                    required
+                    required={!csvUploaded} // Disable required if CSV is uploaded
+                    disabled={csvUploaded} // Disable input if CSV is uploaded
                   />
                 </div>
                 <div className="col-md-4">
@@ -116,14 +174,42 @@ const WhatsappBulkMessages = (prop) => {
                     value={formData.message}
                     onChange={handleChange}
                     placeholder="Enter Message"
-                    required
+                    required={!csvUploaded} // Disable required if CSV is uploaded
+                    disabled={csvUploaded} // Disable input if CSV is uploaded
                   />
                 </div>
                 <div className="col-md-3 mx-md-5 submit-btn">
-                  <button type="submit" className="btn btn-2 w-100">
-                    Send Now
+                  {!csvUploaded && (
+                    <button type="submit" className="btn btn-2 w-100">
+                      Send Now
+                    </button>
+                  )}
+                </div>
+                <div className="col-md-12 mt-3">
+                  <input
+                    type="file"
+                    className="form-control"
+                    accept=".csv"
+                    onChange={handleCSVUpload}
+                  />
+                  <small>Upload CSV for bulk messaging</small>
+                </div>
+                <div className="col-md-12 mt-3">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={downloadSampleCSV}
+                  >
+                    Download Sample CSV
                   </button>
                 </div>
+                {csvUploaded && (
+                  <div className="col-md-3 mt-3">
+                    <button type="submit" className="btn btn-primary w-100">
+                      Send Bulk Messages
+                    </button>
+                  </div>
+                )}
               </div>
               {loading && <p>Loading...</p>}
               {error && <p className="text-danger">{error}</p>}
